@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,18 +12,51 @@ serve(async (req) => {
   }
 
   try {
-    const { scriptName } = await req.json();
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const { scriptId, scriptName, projectId, userId = "anonymous" } = await req.json();
+
+    if (!scriptId || !scriptName || !projectId) {
+      return new Response(
+        JSON.stringify({ error: "scriptId, scriptName, and projectId are required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`Starting execution for script: ${scriptName}, project: ${projectId}`);
+
+    // Create pending execution record
+    const startTime = Date.now();
+    const { data: execution, error: createError } = await supabase
+      .from("executions")
+      .insert({
+        user_id: userId,
+        project_id: projectId,
+        script_id: scriptId,
+        script_name: scriptName,
+        status: "running"
+      })
+      .select()
+      .single();
+
+    if (createError) {
+      console.error("Failed to create execution record:", createError);
+      throw createError;
+    }
+
+    console.log(`Created execution record: ${execution.id}`);
 
     // NOTE: Actual Python script execution would require a separate Node.js backend
     // This is a mock implementation showing the expected API structure
     
     // Simulate test execution with mock results
     const mockSuccess = Math.random() > 0.3; // 70% success rate
+    const duration = Math.floor(Math.random() * 3000) + 1000; // 1-4 seconds
 
-    const result = {
-      status: mockSuccess ? "pass" : "fail",
-      output: mockSuccess 
-        ? `Test Execution Log:
+    const output = mockSuccess 
+      ? `Test Execution Log:
 ==================
 [INFO] Starting test: ${scriptName}
 [INFO] Browser: Chrome (visible mode)
@@ -40,8 +74,8 @@ serve(async (req) => {
 [INFO] Closing browser...
 ==================
 TEST PASSED - All assertions successful
-Execution time: 2.3 seconds`
-        : `Test Execution Log:
+Execution time: ${(duration / 1000).toFixed(1)} seconds`
+      : `Test Execution Log:
 ==================
 [INFO] Starting test: ${scriptName}
 [INFO] Browser: Chrome (visible mode)
@@ -61,7 +95,30 @@ Execution time: 2.3 seconds`
 [INFO] Closing browser...
 ==================
 TEST FAILED - See error details above
-Execution time: 4.1 seconds`
+Execution time: ${(duration / 1000).toFixed(1)} seconds`;
+
+    // Update execution record with results
+    const { error: updateError } = await supabase
+      .from("executions")
+      .update({
+        status: mockSuccess ? "pass" : "fail",
+        output: output,
+        exit_code: mockSuccess ? 0 : 1,
+        duration_ms: duration,
+        completed_at: new Date().toISOString()
+      })
+      .eq("id", execution.id);
+
+    if (updateError) {
+      console.error("Failed to update execution record:", updateError);
+    }
+
+    console.log(`Execution completed: ${mockSuccess ? "PASS" : "FAIL"}`);
+
+    const result = {
+      status: mockSuccess ? "pass" : "fail",
+      output: output,
+      executionId: execution.id
     };
 
     return new Response(

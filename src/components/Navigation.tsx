@@ -1,9 +1,12 @@
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Home, Sparkles, PlayCircle, FileCode } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Home, Sparkles, PlayCircle, FileCode, FolderOpen } from "lucide-react";
+import { useProject } from "@/contexts/ProjectContext";
 
 const Navigation = () => {
   const location = useLocation();
+  const { projects, activeProjectId, setActiveProjectId, loading } = useProject();
 
   const navItems = [
     { path: "/", icon: Home, label: "Dashboard" },
@@ -23,27 +26,55 @@ const Navigation = () => {
             <span className="text-xl font-bold text-foreground">TestFlow Pro</span>
           </Link>
 
-          <div className="flex gap-2">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.path;
-              
-              return (
-                <Link key={item.path} to={item.path}>
-                  <Button
-                    variant={isActive ? "default" : "ghost"}
-                    className={
-                      isActive
-                        ? "bg-primary/20 text-primary hover:bg-primary/30"
-                        : "text-muted-foreground hover:text-foreground"
-                    }
-                  >
-                    <Icon className="mr-2 h-4 w-4" />
-                    {item.label}
-                  </Button>
-                </Link>
-              );
-            })}
+          <div className="flex items-center gap-6">
+            {/* Project Selector */}
+            <div className="flex items-center gap-2">
+              <FolderOpen className="h-4 w-4 text-muted-foreground" />
+              <Select
+                value={activeProjectId || ""}
+                onValueChange={setActiveProjectId}
+                disabled={loading || projects.length === 0}
+              >
+                <SelectTrigger className="w-[220px] bg-muted/50 border-border text-foreground">
+                  <SelectValue placeholder="Select project" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  {projects.map((project) => (
+                    <SelectItem 
+                      key={project.id} 
+                      value={project.id}
+                      className="text-foreground"
+                    >
+                      {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Navigation Items */}
+            <div className="flex gap-2">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = location.pathname === item.path;
+                
+                return (
+                  <Link key={item.path} to={item.path}>
+                    <Button
+                      variant={isActive ? "default" : "ghost"}
+                      className={
+                        isActive
+                          ? "bg-primary/20 text-primary hover:bg-primary/30"
+                          : "text-muted-foreground hover:text-foreground"
+                      }
+                    >
+                      <Icon className="mr-2 h-4 w-4" />
+                      {item.label}
+                    </Button>
+                  </Link>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,20 +12,39 @@ serve(async (req) => {
   }
 
   try {
-    // Mock list of test scripts
-    const scripts = [
-      { id: "s1", name: "login_test.py" },
-      { id: "s2", name: "checkout_flow.py" },
-      { id: "s3", name: "user_registration.py" },
-      { id: "s4", name: "search_functionality.py" },
-      { id: "s5", name: "profile_update.py" },
-      { id: "s6", name: "password_reset.py" }
-    ];
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
-    return new Response(
-      JSON.stringify(scripts),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    // Get projectId from query params
+    const url = new URL(req.url);
+    const projectId = url.searchParams.get("projectId");
+
+    if (!projectId) {
+      return new Response(
+        JSON.stringify({ error: "projectId is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`Fetching scripts for project: ${projectId}`);
+
+    const { data: scripts, error } = await supabase
+      .from("scripts")
+      .select("id, name, description, content")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error("Database error:", error);
+      throw error;
+    }
+
+    console.log(`Found ${scripts?.length || 0} scripts`);
+
+    return new Response(JSON.stringify(scripts || []), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (error) {
     console.error("Error in test-scripts function:", error);
     return new Response(

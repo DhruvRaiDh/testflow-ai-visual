@@ -1,38 +1,44 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileCode, PlayCircle, Clock, Loader2 } from "lucide-react";
+import { FileCode, PlayCircle, Clock, Loader2, FolderOpen } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useProject } from "@/contexts/ProjectContext";
 
 interface Script {
   id: string;
   name: string;
+  description?: string;
 }
 
 const TestScripts = () => {
   const [scripts, setScripts] = useState<Script[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const { activeProjectId, activeProject } = useProject();
 
   useEffect(() => {
-    fetchScripts();
-  }, []);
+    if (activeProjectId) {
+      fetchScripts();
+    }
+  }, [activeProjectId]);
 
   const fetchScripts = async () => {
+    if (!activeProjectId) return;
+    
     try {
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/test-scripts`, {
-        headers: {
-          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`
-        }
-      });
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("scripts")
+        .select("id, name, description")
+        .eq("project_id", activeProjectId)
+        .order("created_at", { ascending: true });
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch scripts");
-      }
+      if (error) throw error;
 
-      const data = await response.json();
-      setScripts(data);
+      setScripts(data || []);
     } catch (error) {
       toast({
         title: "Failed to Load Scripts",
@@ -50,7 +56,9 @@ const TestScripts = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-4xl font-bold text-foreground mb-2">Test Scripts Library</h1>
-            <p className="text-muted-foreground">Manage and execute your automation scripts</p>
+            <p className="text-muted-foreground">
+              {activeProject ? `Project: ${activeProject.name}` : "Select a project to view scripts"}
+            </p>
           </div>
           <Link to="/visual-test">
             <Button className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 transition-opacity">
@@ -60,10 +68,24 @@ const TestScripts = () => {
           </Link>
         </div>
 
-        {loading ? (
+        {!activeProjectId ? (
+          <Card className="bg-card border-border">
+            <CardContent className="flex flex-col items-center justify-center h-64">
+              <FolderOpen className="h-16 w-16 text-muted-foreground mb-4" />
+              <p className="text-muted-foreground">Please select a project from the navigation</p>
+            </CardContent>
+          </Card>
+        ) : loading ? (
           <Card className="bg-card border-border">
             <CardContent className="flex items-center justify-center h-64">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </CardContent>
+          </Card>
+        ) : scripts.length === 0 ? (
+          <Card className="bg-card border-border">
+            <CardContent className="flex flex-col items-center justify-center h-64">
+              <FileCode className="h-16 w-16 text-muted-foreground mb-4" />
+              <p className="text-muted-foreground">No test scripts found for this project</p>
             </CardContent>
           </Card>
         ) : (
@@ -77,18 +99,24 @@ const TestScripts = () => {
                     </div>
                     <div className="flex-1">
                       <CardTitle className="text-foreground text-lg">{script.name}</CardTitle>
-                      <CardDescription className="text-xs">Python Selenium Test</CardDescription>
+                      <CardDescription className="text-xs">
+                        {script.description || "Python Selenium Test"}
+                      </CardDescription>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Clock className="h-4 w-4" />
-                    <span>Last run: 2 hours ago</span>
+                    <span>Ready to run</span>
                   </div>
                   
                   <div className="flex gap-2">
-                    <Link to="/visual-test" className="flex-1">
+                    <Link 
+                      to={`/visual-test?scriptId=${script.id}`} 
+                      className="flex-1"
+                      state={{ script }}
+                    >
                       <Button variant="outline" className="w-full border-primary text-primary hover:bg-primary/10">
                         <PlayCircle className="mr-2 h-4 w-4" />
                         Execute
